@@ -1,6 +1,7 @@
 const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
 const GEO_API = 'https://geocoding-api.open-meteo.com/v1/search';
 
+// Application State
 let currentState = {
     lat: 35.7326, 
     lon: -78.8503,
@@ -8,6 +9,10 @@ let currentState = {
     view: 'temperature' 
 };
 
+// The Debounce Timer variable
+let debounceTimer;
+
+// DOM Elements
 const errorBox = document.getElementById('errorBox');
 const locationName = document.getElementById('locationName');
 const loader = document.getElementById('loader');
@@ -15,6 +20,7 @@ const dataContainer = document.getElementById('dataContainer');
 const tabBtns = document.querySelectorAll('.tab-btn');
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
+const suggestionsBox = document.getElementById('suggestionsBox');
 
 // Map WMO Weather codes to readable conditions
 function getWeatherDescription(code) {
@@ -37,8 +43,19 @@ function getWeatherDescription(code) {
 
 async function searchLocation(query) {
     try {
-        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(query)}&count=1&language=en&format=json`);
-        if (!response.ok) throw new Error('Network response was not ok');
+        // Break the user's search into pieces
+        // Example: "Paris, Texas" becomes ["Paris", "Texas"]
+        const searchParts = query.split(',').map(part => part.trim());
+        const searchCity = searchParts[0];
+
+        // Grab the second part (State or Country) and make it lowercase for easy comparing
+        const searchStateOrCountry = searchParts.length > 1 ? searchParts[1].toLowerCase() : null;
+
+        // Fetch up to 10 cities matching the base name
+        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(searchCity)}&count=10&language=en&format=json`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
         const data = await response.json();
         
@@ -47,16 +64,99 @@ async function searchLocation(query) {
             return;
         }
 
-        const result = data.results[0];
-        currentState.lat = result.latitude;
-        currentState.lon = result.longitude;
-        currentState.name = `${result.name}${result.admin1 ? `, ${result.admin1}` : ''}, ${result.country}`;
+        // Find the best match!
+        let bestMatch = data.results[0]; // Default to the first (most popular) result
+
+        // If the user typed a state or country, look for a match in the 10 results
+        if (searchStateOrCountry) {
+            const foundMatch = data.results.find(city => {
+                const stateName = (city.admin1 || "").toLowerCase();
+                const countryName = (city.country || "").toLowerCase();
+                
+                // Does the API's state or country match what the user typed?
+                return stateName === searchStateOrCountry || countryName === searchStateOrCountry;
+            });
+
+            // If we found the specific one they wanted, overwrite the default!
+            if (foundMatch) {
+                bestMatch = foundMatch;
+            }
+        }
+
+        // 4. Build the display name safely (avoiding Tokyo, Tokyo, Japan)
+        const showState = bestMatch.admin1 && bestMatch.admin1 !== bestMatch.name;
+        const stateString = showState ? `, ${bestMatch.admin1}` : '';
+        const countryString = bestMatch.country ? `, ${bestMatch.country}` : '';
+
+        // 5. Update application memory and UI
+        currentState.lat = bestMatch.latitude;
+        currentState.lon = bestMatch.longitude;
+        currentState.name = `${bestMatch.name}${stateString}${countryString}`;
         
+        if (typeof suggestionsBox !== 'undefined') {
+            suggestionsBox.classList.add('hidden');
+        }
+
         loadDataForCurrentView();
 
     } catch (error) {
         showError("Failed to search location. Please check your connection.");
-        console.error(error);
+        console.error("Search Error Details:", error);
+    }
+}
+
+// Fetch suggestions as the user types
+async function fetchSuggestions(query) {
+    if (!query) {
+        suggestionsBox.classList.add('hidden');
+        return;
+    }
+
+    try {
+        // We use count=5 to get up to 5 suggestions
+        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(query)}&count=5&language=en&format=json`);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const data = await response.json();
+        
+        if (!data.results || data.results.length === 0) {
+            suggestionsBox.classList.add('hidden');
+            return;
+        }
+
+        // Clear old suggestions
+        suggestionsBox.innerHTML = '';
+        currentFocus = -1;
+        
+        // Build the dropdown list
+        data.results.forEach(city => {
+            const cityName = `${city.name}${city.admin1 ? `, ${city.admin1}` : ''}, ${city.country}`;
+            
+            const div = document.createElement('div');
+            div.className = 'suggestion-item';
+            div.textContent = cityName;
+            
+            // When a suggestion is clicked!
+            div.addEventListener('click', () => {
+                // Fill the input
+                searchInput.value = cityName;
+                // Hide the dropdown
+                suggestionsBox.classList.add('hidden');
+                
+                // Directly update the state and fetch weather (skipping the search searchLocation function!)
+                currentState.lat = city.latitude;
+                currentState.lon = city.longitude;
+                currentState.name = cityName;
+                loadDataForCurrentView();
+            });
+
+            suggestionsBox.appendChild(div);
+        });
+
+        suggestionsBox.classList.remove('hidden');
+
+    } catch (error) {
+        console.error("Failed to fetch suggestions", error);
     }
 }
 
@@ -131,6 +231,26 @@ searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         const query = searchInput.value.trim();
         if (query) searchLocation(query);
+    }
+});
+
+// Listen for typing to show suggestions (with Debouncing)
+searchInput.addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    
+    // Clear the previous timer
+    clearTimeout(debounceTimer);
+    
+    // Set a new timer to wait 300ms after they stop typing before fetching
+    debounceTimer = setTimeout(() => {
+        fetchSuggestions(query);
+    }, 300);
+});
+
+// Close suggestions if the user clicks anywhere else on the page
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrapper')) {
+        suggestionsBox.classList.add('hidden');
     }
 });
 
