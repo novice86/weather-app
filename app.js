@@ -11,6 +11,7 @@ const errorBox = document.getElementById('errorBox');
 const locationName = document.getElementById('locationName');
 const loader = document.getElementById('loader');
 const dataContainer = document.getElementById('dataContainer');
+const tabBtns = document.querySelectorAll('.tab-btn');
 
 // Map WMO Weather codes to readable conditions
 function getWeatherDescription(code) {
@@ -80,6 +81,18 @@ async function loadDataForCurrentView() {
         loader.classList.add('hidden');
     }
 }
+
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // Update active class styling
+        tabBtns.forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+
+        // Update state and fetch NEW data
+        currentState.view = e.target.getAttribute('data-view');
+        loadDataForCurrentView();
+    });
+});
 
 // Initialize app on load
 loadDataForCurrentView();
