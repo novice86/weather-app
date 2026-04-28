@@ -32,6 +32,40 @@ h1 {
     margin-bottom: 1rem;
 }
 
+.search-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+input {
+    flex: 1;
+    padding: 12px;
+    font-size: 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    outline: none;
+}
+
+input:focus {
+    border-color: var(--primary-color);
+}
+
+button {
+    padding: 12px 20px;
+    font-size: 1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: var(--primary-hover);
+}
+
 .error {
     background-color: var(--error-bg);
     color: var(--error-text);

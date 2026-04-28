@@ -1,4 +1,5 @@
 const FORECAST_API = 'https://api.open-meteo.com/v1/forecast';
+const GEO_API = 'https://geocoding-api.open-meteo.com/v1/search';
 
 let currentState = {
     lat: 35.7326, 
@@ -12,6 +13,8 @@ const locationName = document.getElementById('locationName');
 const loader = document.getElementById('loader');
 const dataContainer = document.getElementById('dataContainer');
 const tabBtns = document.querySelectorAll('.tab-btn');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
 
 // Map WMO Weather codes to readable conditions
 function getWeatherDescription(code) {
@@ -30,6 +33,31 @@ function getWeatherDescription(code) {
         95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail'
     };
     return weatherCodes[code] || 'Unknown Conditions';
+}
+
+async function searchLocation(query) {
+    try {
+        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(query)}&count=1&language=en&format=json`);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const data = await response.json();
+        
+        if (!data.results || data.results.length === 0) {
+            showError("City not found. Please try another search.");
+            return;
+        }
+
+        const result = data.results[0];
+        currentState.lat = result.latitude;
+        currentState.lon = result.longitude;
+        currentState.name = `${result.name}${result.admin1 ? `, ${result.admin1}` : ''}, ${result.country}`;
+        
+        loadDataForCurrentView();
+
+    } catch (error) {
+        showError("Failed to search location. Please check your connection.");
+        console.error(error);
+    }
 }
 
 function showError(message) {
@@ -92,6 +120,18 @@ tabBtns.forEach(btn => {
         currentState.view = e.target.getAttribute('data-view');
         loadDataForCurrentView();
     });
+});
+
+searchBtn.addEventListener('click', () => {
+    const query = searchInput.value.trim();
+    if (query) searchLocation(query);
+});
+
+searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const query = searchInput.value.trim();
+        if (query) searchLocation(query);
+    }
 });
 
 // Initialize app on load
