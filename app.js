@@ -12,6 +12,9 @@ let currentState = {
 // The Debounce Timer variable
 let debounceTimer;
 
+// Variable to track keyboard navigation in the dropdown
+let activeIndex = -1;
+
 // DOM Elements
 const errorBox = document.getElementById('errorBox');
 const locationName = document.getElementById('locationName');
@@ -44,15 +47,16 @@ function getWeatherDescription(code) {
 async function searchLocation(query) {
     try {
         // Break the user's search into pieces
-        // Example: "Paris, Texas" becomes ["Paris", "Texas"]
         const searchParts = query.split(',').map(part => part.trim());
+        //Grab City
         const searchCity = searchParts[0];
 
-        // Grab the second part (State or Country) and make it lowercase for easy comparing
+        // Grab the second part (State or Country)
         const searchStateOrCountry = searchParts.length > 1 ? searchParts[1].toLowerCase() : null;
 
         // Fetch up to 10 cities matching the base name
-        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(searchCity)}&count=10&language=en&format=json`);
+        const url = `${GEO_API}?name=${encodeURIComponent(searchCity)}&count=10&language=en&format=json`;
+        const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -64,8 +68,8 @@ async function searchLocation(query) {
             return;
         }
 
-        // Find the best match!
-        let bestMatch = data.results[0]; // Default to the first (most popular) result
+        // Find the best match
+        let bestMatch = data.results[0];
 
         // If the user typed a state or country, look for a match in the 10 results
         if (searchStateOrCountry) {
@@ -77,22 +81,22 @@ async function searchLocation(query) {
                 return stateName === searchStateOrCountry || countryName === searchStateOrCountry;
             });
 
-            // If we found the specific one they wanted, overwrite the default!
+            // If we found the specific one user wanted, overwrite the default
             if (foundMatch) {
                 bestMatch = foundMatch;
             }
         }
 
-        // 4. Build the display name safely (avoiding Tokyo, Tokyo, Japan)
-        const showState = bestMatch.admin1 && bestMatch.admin1 !== bestMatch.name;
-        const stateString = showState ? `, ${bestMatch.admin1}` : '';
+        // Build the display name safely
+        const stateString = bestMatch.admin1 ? `, ${bestMatch.admin1}` : '';
         const countryString = bestMatch.country ? `, ${bestMatch.country}` : '';
 
-        // 5. Update application memory and UI
+        // Update application memory and UI
         currentState.lat = bestMatch.latitude;
         currentState.lon = bestMatch.longitude;
         currentState.name = `${bestMatch.name}${stateString}${countryString}`;
         
+        // Hide suggestion box
         if (typeof suggestionsBox !== 'undefined') {
             suggestionsBox.classList.add('hidden');
         }
@@ -114,8 +118,9 @@ async function fetchSuggestions(query) {
 
     try {
         // We use count=5 to get up to 5 suggestions
-        const response = await fetch(`${GEO_API}?name=${encodeURIComponent(query)}&count=5&language=en&format=json`);
-        if (!response.ok) throw new Error('Network response was not ok');
+        const url = `${GEO_API}?name=${encodeURIComponent(query)}&count=5&language=en&format=json`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
         const data = await response.json();
         
@@ -126,7 +131,7 @@ async function fetchSuggestions(query) {
 
         // Clear old suggestions
         suggestionsBox.innerHTML = '';
-        currentFocus = -1;
+        activeIndex = -1;
         
         // Build the dropdown list
         data.results.forEach(city => {
@@ -210,30 +215,6 @@ async function loadDataForCurrentView() {
     }
 }
 
-tabBtns.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        // Update active class styling
-        tabBtns.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-
-        // Update state and fetch NEW data
-        currentState.view = e.target.getAttribute('data-view');
-        loadDataForCurrentView();
-    });
-});
-
-searchBtn.addEventListener('click', () => {
-    const query = searchInput.value.trim();
-    if (query) searchLocation(query);
-});
-
-searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-        const query = searchInput.value.trim();
-        if (query) searchLocation(query);
-    }
-});
-
 // Listen for typing to show suggestions (with Debouncing)
 searchInput.addEventListener('input', (e) => {
     const query = e.target.value.trim();
@@ -247,11 +228,85 @@ searchInput.addEventListener('input', (e) => {
     }, 300);
 });
 
+searchInput.addEventListener('keydown', (e) => {
+    let items = suggestionsBox.getElementsByClassName('suggestion-item');
+    if (!items || items.length === 0 || suggestionsBox.classList.contains('hidden')) return;
+
+    if (e.key === 'ArrowDown') {
+        activeIndex++;
+        addActive(items);
+        // Stops the cursor from jumping to the end of the input field
+        e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+        activeIndex--;
+        addActive(items);
+        e.preventDefault();
+    } else if (e.key === 'Enter') {
+        // If an item is highlighted, stop the main search and click the item instead
+        if (activeIndex > -1) {
+            e.preventDefault(); 
+            items[activeIndex].click(); 
+        }
+    }
+});
+
+// Helper function to add the active class
+function addActive(items) {
+    if (!items) return;
+    
+    // First, remove the active class from all items
+    removeActive(items);
+    
+    // Loop the focus back around if they go off the top or bottom
+    if (activeIndex >= items.length) activeIndex = 0;
+    if (activeIndex < 0) activeIndex = (items.length - 1);
+    
+    // Add the active class to the currently focused item
+    items[activeIndex].classList.add('suggestion-active');
+    
+    // Scroll the dropdown so the active item is always visible
+    items[activeIndex].scrollIntoView({ block: "nearest" });
+}
+
+// Helper function to remove the active class
+function removeActive(items) {
+    for (let i = 0; i < items.length; i++) {
+        items[i].classList.remove('suggestion-active');
+    }
+}
+
 // Close suggestions if the user clicks anywhere else on the page
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-wrapper')) {
         suggestionsBox.classList.add('hidden');
     }
+});
+
+// Listen for user click enter key when searchInput is active
+searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const query = searchInput.value.trim();
+        if (query) searchLocation(query);
+    }
+});
+
+// Listen for search button click
+searchBtn.addEventListener('click', () => {
+    const query = searchInput.value.trim();
+    if (query) searchLocation(query);
+});
+
+// Listen for tab button clicks
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // Update active class styling
+        tabBtns.forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+
+        // Update state and fetch NEW data
+        currentState.view = e.target.getAttribute('data-view');
+        loadDataForCurrentView();
+    });
 });
 
 // Initialize app on load
