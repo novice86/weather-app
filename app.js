@@ -87,7 +87,7 @@ async function searchLocation(query) {
             }
         }
 
-        // Build the display name safely
+        // Build the display name
         const stateString = bestMatch.admin1 ? `, ${bestMatch.admin1}` : '';
         const countryString = bestMatch.country ? `, ${bestMatch.country}` : '';
 
@@ -117,7 +117,7 @@ async function fetchSuggestions(query) {
     }
 
     try {
-        // We use count=5 to get up to 5 suggestions
+        // Use count=5 to get up to 5 suggestions
         const url = `${GEO_API}?name=${encodeURIComponent(query)}&count=5&language=en&format=json`;
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -141,7 +141,7 @@ async function fetchSuggestions(query) {
             div.className = 'suggestion-item';
             div.textContent = cityName;
             
-            // When a suggestion is clicked!
+            // Event listener for when a user clicks a suggestion
             div.addEventListener('click', () => {
                 // Fill the input
                 searchInput.value = cityName;
@@ -165,12 +165,14 @@ async function fetchSuggestions(query) {
     }
 }
 
+// Show error messages to the user
 function showError(message) {
     errorBox.textContent = message;
     errorBox.classList.remove('hidden');
     setTimeout(() => errorBox.classList.add('hidden'), 5000);
 }
 
+// Fetch current temperature
 async function fetchTemperature() {
     const url = `${FORECAST_API}?latitude=${currentState.lat}&longitude=${currentState.lon}&current=temperature_2m,apparent_temperature&temperature_unit=fahrenheit`;
     const response = await fetch(url);
@@ -184,6 +186,7 @@ async function fetchTemperature() {
     `;
 }
 
+// Fetch weather conditions
 async function fetchConditions() {
     const url = `${FORECAST_API}?latitude=${currentState.lat}&longitude=${currentState.lon}&current=weather_code,wind_speed_10m&wind_speed_unit=mph`;
     const response = await fetch(url);
@@ -199,6 +202,7 @@ async function fetchConditions() {
     `;
 }
 
+// Load the appropriate data based on the current view (temperature or conditions)
 async function loadDataForCurrentView() {
     locationName.textContent = currentState.name;
     dataContainer.innerHTML = '';
@@ -228,6 +232,7 @@ searchInput.addEventListener('input', (e) => {
     }, 300);
 });
 
+// Listen for keyboard navigation in the suggestions dropdown
 searchInput.addEventListener('keydown', (e) => {
     let items = suggestionsBox.getElementsByClassName('suggestion-item');
     if (!items || items.length === 0 || suggestionsBox.classList.contains('hidden')) return;
@@ -235,14 +240,12 @@ searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
         activeIndex++;
         addActive(items);
-        // Stops the cursor from jumping to the end of the input field
         e.preventDefault();
     } else if (e.key === 'ArrowUp') {
         activeIndex--;
         addActive(items);
         e.preventDefault();
     } else if (e.key === 'Enter') {
-        // If an item is highlighted, stop the main search and click the item instead
         if (activeIndex > -1) {
             e.preventDefault(); 
             items[activeIndex].click(); 
@@ -254,7 +257,7 @@ searchInput.addEventListener('keydown', (e) => {
 function addActive(items) {
     if (!items) return;
     
-    // First, remove the active class from all items
+    // Remove the active class from all items
     removeActive(items);
     
     // Loop the focus back around if they go off the top or bottom
